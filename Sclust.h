@@ -17,7 +17,9 @@ inline void print_header()
   string header = "\n\t --- Sclust: Mutation Clustering using Smoothing Splines ---\n \
       \t\t    Version "+(string)SCLUSTVERSION+"  21/March/2019\n \
       \t     University of Cologne \n \
-      \t     Peifer Lab\n\n";
+      \t     Peifer Lab\n\n \
+      \t\t    Version "+(string)SCLUSTVERSION+"p  11/February/2026\n \
+      \t     modified by Konstantinos Mavrommatis \n\n";
   cerr << header;
 }
 
