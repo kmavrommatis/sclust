@@ -48,7 +48,8 @@ string presclust_help = "      SYNOPSIS \n \t Sclust bamprocess  <options>\n\n \
      \t -o        \t output name\n\
      \t -r        \t chromosome to extract\n \
      \t -build    \t genome build (possible: hg38, hg19, mm10) [hg19]\n\
-     \t -part     \t choose genome partition [1]:\n";
+     \t -dir      \t data directory containing annotation and partitions subdirectories\n\
+     \t -part     \t choose genome partition [1]\n";
 
 static long lminarg1,lminarg2;
 #define LMIN(a,b) (lminarg1=(a),lminarg2=(b),(lminarg1) < (lminarg2) ?\
@@ -66,9 +67,9 @@ static double dminarg1,dminarg2;
 
 
 //prototypes
-void presclust_core(string chromosome,string part_name,string out_name,string t_file,string n_file,string build,long max_insert, vector<SNP_data> &snp_list, vector<CN_data> &CN);
+void presclust_core(string chromosome,string part_name,string out_name,string t_file,string n_file,string build,long max_insert, vector<SNP_data> &snp_list, vector<CN_data> &CN, string data_dir);
 void pileup_buffer_bam_presclust(string rname,long pos,bam_map &m1,samfile_t *fp,bam1_t *b,vector<pileup> &buffer,bool &is_eof,long &cur_pos,long &n_reads,vector<long> &rs);
-void merge(string in_name,string out_name,string build);
+void merge(string in_name,string out_name,string build,string data_dir);
 
 
 void bamprocess(int argc, char *argv[])
@@ -86,6 +87,7 @@ void bamprocess(int argc, char *argv[])
     {"part"     , 1, 0,    5},
     {"r"        , 1, 0,    6},
     {"i"        , 1, 0,    7},
+    {"dir"      , 1, 0,    8},
     {0, 0, 0, 0}
   }; 
   
@@ -93,26 +95,17 @@ void bamprocess(int argc, char *argv[])
   string n_file="";
   string in_file="";
   string out_name="";
-  string build="hg19";
+  string build="hg38";
   string chromosome="";
+  string data_dir=(string)INSTALLDIR+"/..";
   ofstream out;
   ifstream in;
   long i; int list=0;
   string tmp;
 
-  //read partition list file
+  //read partition list file will be done after parsing command line arguments
 
   vector<string> part_list;
-  
-  in.open(((string)INSTALLDIR+"/../partitions/partition_list.txt").c_str());
-  if(!in.is_open())
-    {
-      cerr << "Error: cannot open partition table.\n";
-      exit(1);
-    }
-  while(in >> tmp)
-    part_list.push_back(tmp);
-  in.close();
 
   optind=0;
   //parse command line arguments
@@ -155,11 +148,6 @@ void bamprocess(int argc, char *argv[])
 	  break;
 	case 5:
 	  list=abs(atoi(optarg))-1;
-	  if(list < 0 || list >= part_list.size())
-	    {
-	      cerr << "Error: invalid genome partition.\n";
-	      exit(1);
-	    }
 	  break;
 	case 6:
 	  chromosome=(string)optarg;
@@ -167,11 +155,32 @@ void bamprocess(int argc, char *argv[])
 	case 7:
 	  in_file=(string)optarg;
           break;
+	case 8:
+	  data_dir=(string)optarg;
+          break;
 	default:
           cerr << "Error: cannot parse arguments.\n";
           exit(1);
 	  break;
         }
+    }
+
+  //now read partition list file after parsing arguments (so data_dir is set)
+  in.open((data_dir+"/partitions/partition_list.txt").c_str());
+  if(!in.is_open())
+    {
+      cerr << "Error: cannot open partition table.\n";
+      exit(1);
+    }
+  while(in >> tmp)
+    part_list.push_back(tmp);
+  in.close();
+
+  //validate partition selection after loading the list
+  if(list < 0 || list >= part_list.size())
+    {
+      cerr << "Error: invalid genome partition.\n";
+      exit(1);
     }
 
   if((argc-optind)!=1)
@@ -219,7 +228,7 @@ void bamprocess(int argc, char *argv[])
 
   if(in_file=="" && n_file != "")
     {
-      presclust_core(chromosome,part_list[list],out_name,t_file,n_file,build,max_insert,snp_list,CN);
+      presclust_core(chromosome,part_list[list],out_name,t_file,n_file,build,max_insert,snp_list,CN,data_dir);
       
       //save intermediate data
       out.open((out_name+"_"+chromosome+"_bamprocess_data.txt").c_str());
@@ -245,13 +254,13 @@ void bamprocess(int argc, char *argv[])
     }
   else
     {
-      merge(in_file,out_name,build);
+      merge(in_file,out_name,build,data_dir);
     }
   
 }
 
 
-void presclust_core(string chromosome,string part_name,string out_name,string t_file,string n_file,string build,long max_insert, vector<SNP_data> &snp_list, vector<CN_data> &CN)
+void presclust_core(string chromosome,string part_name,string out_name,string t_file,string n_file,string build,long max_insert, vector<SNP_data> &snp_list, vector<CN_data> &CN, string data_dir)
 {
   long max_buffer_size=10000;
   long min_coverage=15;
@@ -363,7 +372,7 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
   header = line.str();
 
   //read reference list
-  in.open(((string)INSTALLDIR+"/../annotation/"+build+"/ref_names.txt").c_str());
+  in.open((data_dir+"/annotation/"+build+"/ref_names.txt").c_str());
   if(!in.is_open())
     {
       cerr << "Error: cannot open reference names file.\n";
@@ -375,7 +384,7 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
   in.close();
 
   //read target list
-  in.open(((string)INSTALLDIR+"/../partitions/"+build+"_"+part_name+".txt").c_str());
+  in.open((data_dir+"/partitions/"+build+"_"+part_name+".txt").c_str());
   if(!in.is_open())
     {
       cerr << "Error: cannot open partition list.\n";
@@ -423,16 +432,16 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
 
       cout << "Processing " << ref_name << ":\n";
       total_t_chr=0;
-      stat=nibObj.open((string)INSTALLDIR+"/../annotation/"+build+"/"+build+"_"+ref_name+".nib");
+      stat=nibObj.open(data_dir+"/annotation/"+build+"/"+build+"_"+ref_name+".nib");
       if(stat!=0)
 	{
-	  cerr << "Error: " << errormsg[stat] << " " << (string)INSTALLDIR+"/"+build+"/"+build+"_"+ref_name+".nib" << endl;
+	  cerr << "Error: " << errormsg[stat] << " " << data_dir+"/"+build+"/"+build+"_"+ref_name+".nib" << endl;
 	  exit(1);
 	}
-      inSNP.open(((string)INSTALLDIR+"/../annotation/SNP_"+build+"/"+build+"_snp_"+ref_name+".txt").c_str());
+      inSNP.open((data_dir+"/annotation/SNP_"+build+"/"+build+"_snp_"+ref_name+".txt").c_str());
       if(!inSNP.is_open())
 	{
-	  cerr << "Error: cannot open " << ((string)INSTALLDIR+"/SNP_"+build+"/"+build+"_snp_"+ref_name+".txt.") << endl;
+	  cerr << "Error: cannot open " << (data_dir+"/SNP_"+build+"/"+build+"_snp_"+ref_name+".txt.") << endl;
 	  exit(1);
  	}
       //some initializations
@@ -769,7 +778,7 @@ void pileup_buffer_bam_presclust(string rname,long pos,bam_map &m1,samfile_t *fp
 }
 
 
-void merge(string in_name,string out_name,string build)
+void merge(string in_name,string out_name,string build,string data_dir)
 {
   string tmp;
   stringstream line;
@@ -783,7 +792,7 @@ void merge(string in_name,string out_name,string build)
 
 
   //read chromosome list
-  in.open(((string)INSTALLDIR+"/../annotation/"+build+"/ref_names.txt").c_str());
+  in.open((data_dir+"/annotation/"+build+"/ref_names.txt").c_str());
   if(!in.is_open())
     {
       cerr << "Error: cannot open chromosome list.\n";
