@@ -4,9 +4,9 @@ GFORT_EX	:= $(shell command -v gfortran 2> /dev/null)
 R_EX		:= $(shell command -v R 2> /dev/null)
 
 ifdef R_EX
-  CCFLAGS = -O2 -ftree-vectorize -std=c++0x -D RPLOTTING
+  CCFLAGS = -O2 -ftree-vectorize -std=c++0x -fopenmp -D RPLOTTING
 else 
-  CCFLAGS = -O2 -ftree-vectorize -std=c++0x 
+  CCFLAGS = -O2 -ftree-vectorize -std=c++0x -fopenmp
 endif
 
 

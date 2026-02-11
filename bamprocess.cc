@@ -30,6 +30,7 @@
 #include <map>
 #include <list>
 #include <sstream>
+#include <omp.h>
 
 #include "Sclust.h"
 #include "installdir.h"
@@ -46,10 +47,11 @@ string presclust_help = "      SYNOPSIS \n \t Sclust bamprocess  <options>\n\n \
      \t -n        \t normal alignment file (sorted, indexed bam-file)\n \
      \t -i        \t input for merging chromosome files (prefix only)\n \
      \t -o        \t output name\n\
-     \t -r        \t chromosome to extract\n \
+     \t -r        \t chromosome(s) to extract (comma-separated or 'all')\n \
      \t -build    \t genome build (possible: hg38, hg19, mm10) [hg19]\n\
      \t -dir      \t data directory containing annotation and partitions subdirectories\n\
-     \t -part     \t choose genome partition [1]\n";
+     \t -part     \t choose genome partition [1]\n\
+     \t -threads  \t number of parallel threads [1]\n";
 
 static long lminarg1,lminarg2;
 #define LMIN(a,b) (lminarg1=(a),lminarg2=(b),(lminarg1) < (lminarg2) ?\
@@ -70,6 +72,7 @@ static double dminarg1,dminarg2;
 void presclust_core(string chromosome,string part_name,string out_name,string t_file,string n_file,string build,long max_insert, vector<SNP_data> &snp_list, vector<CN_data> &CN, string data_dir);
 void pileup_buffer_bam_presclust(string rname,long pos,bam_map &m1,samfile_t *fp,bam1_t *b,vector<pileup> &buffer,bool &is_eof,long &cur_pos,long &n_reads,vector<long> &rs);
 void merge(string in_name,string out_name,string build,string data_dir);
+void process_chromosome_worker(string chromosome, string part_name, string out_name, string t_file, string n_file, string build, long max_insert, string data_dir);
 
 
 void bamprocess(int argc, char *argv[])
@@ -88,6 +91,7 @@ void bamprocess(int argc, char *argv[])
     {"r"        , 1, 0,    6},
     {"i"        , 1, 0,    7},
     {"dir"      , 1, 0,    8},
+    {"threads"  , 1, 0,    9},
     {0, 0, 0, 0}
   }; 
   
@@ -98,6 +102,7 @@ void bamprocess(int argc, char *argv[])
   string build="hg38";
   string chromosome="";
   string data_dir=(string)INSTALLDIR+"/..";
+  int num_threads=1;
   ofstream out;
   ifstream in;
   long i; int list=0;
@@ -142,8 +147,8 @@ void bamprocess(int argc, char *argv[])
 	  build = (string)optarg;
 	  if(build != "hg38" && build != "hg19" && build != "mm10")
 	    {
-	      cerr << "Error: please use hg38, hg19 or mm10. Falling back to default value: hg19.\n";
-	      build = "hg19";	      
+	      cerr << "Error: please use hg38, hg19 or mm10. Falling back to default value: hg38.\n";
+	      build = "hg38";	      
 	    }
 	  break;
 	case 5:
@@ -157,6 +162,10 @@ void bamprocess(int argc, char *argv[])
           break;
 	case 8:
 	  data_dir=(string)optarg;
+          break;
+	case 9:
+	  num_threads=atoi(optarg);
+	  if(num_threads < 1) num_threads = 1;
           break;
 	default:
           cerr << "Error: cannot parse arguments.\n";
@@ -197,7 +206,8 @@ void bamprocess(int argc, char *argv[])
     {
       if(t_file=="" || out_name == "" || chromosome == "")
 	{
-	  cerr << "Error: please specify alignment files (tumor and normal), output name, or chromosome name.\n";
+	  cerr << "Error: please specify alignment files (tumor and normal), output name, and chromosome(s) to process.\n";
+	  cerr << "       Use -r chr1 for single chromosome, -r chr1,chr2,chr3 for multiple, or -r all for all chromosomes.\n";
 	  print_header();
 	  cerr << presclust_help;
 	  for(i=0;i<part_list.size();i++)
@@ -228,35 +238,93 @@ void bamprocess(int argc, char *argv[])
 
   if(in_file=="" && n_file != "")
     {
-      presclust_core(chromosome,part_list[list],out_name,t_file,n_file,build,max_insert,snp_list,CN,data_dir);
-      
-      //save intermediate data
-      out.open((out_name+"_"+chromosome+"_bamprocess_data.txt").c_str());
-      out << "<snp_list>\n"; 
-      for(i=0;i<snp_list.size();i++)
-	{
-	  out << snp_list[i].target << "\t" << snp_list[i].chr << "\t" << snp_list[i].pos;
-	  for(int ii=0;ii<4;ii++)
-	    out << "\t" << snp_list[i].s_base_t[ii];
-	  for(int ii=0;ii<4;ii++)
-	    out << "\t" << snp_list[i].s_base_n[ii];
-	  out << "\t" << snp_list[i].allele_A <<  "\t" << snp_list[i].allele_B << endl;
-	}
-      out << "</snp_list>\n"; 
-      out << "<cn>\n"; 
-      for(i=0;i<CN.size();i++)
-	{
-	  out << CN[i].chr << "\t" << CN[i].start << "\t" << CN[i].end << "\t" << CN[i].n_reads_t << "\t" << CN[i].n_reads_n;
-	  out << "\t" << CN[i].GC_content << endl;
-	}
-      out << "</cn>\n";       
-      out.close();
+      //parse chromosomes to process
+      vector<string> chromosomes_to_process;
+      if(chromosome == "all" || chromosome == "ALL")
+        {
+          //read all chromosomes from ref_names.txt
+          in.open((data_dir+"/annotation/"+build+"/ref_names.txt").c_str());
+          if(!in.is_open())
+            {
+              cerr << "Error: cannot open reference names file.\n";
+              exit(1);
+            }
+          while(in >> tmp)
+            chromosomes_to_process.push_back(tmp);
+          in.close();
+        }
+      else
+        {
+          //parse comma-separated list
+          stringstream ss(chromosome);
+          while(getline(ss, tmp, ','))
+            chromosomes_to_process.push_back(tmp);
+        }
+
+      cout << "Processing " << chromosomes_to_process.size() << " chromosome(s) using " << num_threads << " thread(s)...\n";
+
+      //process chromosomes in parallel using OpenMP
+      #pragma omp parallel for num_threads(num_threads) schedule(dynamic)
+      for(size_t chr_idx=0; chr_idx < chromosomes_to_process.size(); chr_idx++)
+        {
+          process_chromosome_worker(chromosomes_to_process[chr_idx], part_list[list], 
+                                   out_name, t_file, n_file, build, max_insert, data_dir);
+        }
+
+      cout << "All chromosomes processed. Merging results...\n";
+      //automatically merge results
+      merge(out_name,out_name,build,data_dir);
+      cout << "Merging complete.\n";
     }
   else
     {
       merge(in_file,out_name,build,data_dir);
     }
   
+}
+
+
+void process_chromosome_worker(string chromosome, string part_name, string out_name, 
+                               string t_file, string n_file, string build, 
+                               long max_insert, string data_dir)
+{
+  vector<SNP_data> snp_list;
+  vector<CN_data> CN;
+  ofstream out;
+  
+  #pragma omp critical
+  {
+    cout << "Processing chromosome " << chromosome << " (thread " << omp_get_thread_num() << ")..." << endl;
+  }
+  
+  presclust_core(chromosome, part_name, out_name, t_file, n_file, build, max_insert, snp_list, CN, data_dir);
+  
+  //save intermediate data
+  out.open((out_name+"_"+chromosome+"_bamprocess_data.txt").c_str());
+  out << "<snp_list>\n"; 
+  for(size_t i=0; i<snp_list.size(); i++)
+  {
+    out << snp_list[i].target << "\t" << snp_list[i].chr << "\t" << snp_list[i].pos;
+    for(int ii=0; ii<4; ii++)
+      out << "\t" << snp_list[i].s_base_t[ii];
+    for(int ii=0; ii<4; ii++)
+      out << "\t" << snp_list[i].s_base_n[ii];
+    out << "\t" << snp_list[i].allele_A <<  "\t" << snp_list[i].allele_B << endl;
+  }
+  out << "</snp_list>\n"; 
+  out << "<cn>\n"; 
+  for(size_t i=0; i<CN.size(); i++)
+  {
+    out << CN[i].chr << "\t" << CN[i].start << "\t" << CN[i].end << "\t" << CN[i].n_reads_t << "\t" << CN[i].n_reads_n;
+    out << "\t" << CN[i].GC_content << endl;
+  }
+  out << "</cn>\n";       
+  out.close();
+  
+  #pragma omp critical
+  {
+    cout << "Completed chromosome " << chromosome << endl;
+  }
 }
 
 
@@ -408,7 +476,7 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
   while(is_eof_t && is_eof_n) //loop over chromosomes
     {
       if(rr!=0)
-	cout << "\nTotal time used to process " << ref_name << ":\t" << total_t_chr/60 << " min " << total_t_chr-60*(total_t_chr/60) << " sec  " << endl << endl;
+	; //cout << "\nTotal time used to process " << ref_name << ":\t" << total_t_chr/60 << " min " << total_t_chr-60*(total_t_chr/60) << " sec  " << endl << endl;
       rr=1;
 
       if(is_eof_t==0 || is_eof_n==0 || m1_t.rname!=chromosome || m1_n.rname!=chromosome)
@@ -430,7 +498,7 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
       if(Tend[k].size()==0)
 	exit(1);
 
-      cout << "Processing " << ref_name << ":\n";
+      //cout << "Processing " << ref_name << ":\n";
       total_t_chr=0;
       stat=nibObj.open(data_dir+"/annotation/"+build+"/"+build+"_"+ref_name+".nib");
       if(stat!=0)
@@ -467,22 +535,22 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
       reads_target_t=0; reads_target_n=0;
       
       vector<char> ref_chromosome; ref_chromosome.push_back('N'); //to occupy the zero position
-      cout << "Read reference of " << ref_name << " into memory.\n";
+      //cout << "Read reference of " << ref_name << " into memory.\n";
       for(ref_pos=1;ref_pos <= n_bases;ref_pos++)
 	{
 	  nibObj.nextBase(&wt_base);
 	  ref_chromosome.push_back(wt_base);
 	}
-      cout << "Processing the data: ";
+      //cout << "Processing the data: ";
       for(ref_pos=1;ref_pos <= n_bases;ref_pos++) //loop over position
 	{
 	  if(100*(double)ref_pos/(double)n_bases>=percentage)
 	    {
 	      t_end=time(NULL); dt=t_end-t_start;
 	      total_t+=dt; total_t_chr+=dt;
-	      cout << "*";
+	      //cout << "*";
 	      t_start=time(NULL);
-	      cout.flush();
+	      //cout.flush();
 	      percentage+=10;
 	    }
 	  
@@ -570,7 +638,7 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
 		}
 	    }
 	} 
-      cout << endl;
+      //cout << endl;
       //close nib stream
       nibObj.close();
       inSNP.close();
@@ -579,7 +647,7 @@ void presclust_core(string chromosome,string part_name,string out_name,string t_
   //close bam stream
   samclose(fp_t); samclose(fp_n);
 
-  cout << "\nProcessing of " << ref_name << " successfully accomplished. Total time used: " << total_t/60 << " min " << total_t-60*(total_t/60) << " sec  " << endl << endl;
+  //cout << "\nProcessing of " << ref_name << " successfully accomplished. Total time used: " << total_t/60 << " min " << total_t-60*(total_t/60) << " sec  " << endl << endl;
 }
 
 
