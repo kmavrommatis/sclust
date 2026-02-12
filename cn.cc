@@ -820,7 +820,7 @@ void purity_est(vector<CN_data> &CN, vector<SNP_data> snp_list, vector<vcf_data>
 	       est_alleles_seqcn(obs_p,purity,scale,sig,seqcn,L_bi,L_cn);
 	       mut2cn(obs_p,vcf);
 	       vcf_expected_AF(seqcn.out_name,obs_p,purity,vcf,seqcn);
-	       system(((string)INSTALLDIR+"/../bin/Sclust cluster -i "+seqcn.out_name).c_str());
+	       system(((string)"Sclust cluster -i "+seqcn.out_name).c_str());
 	       in.open((seqcn.out_name+"_mclusters.txt").c_str());
 	       if(!in.is_open())
 		 {
