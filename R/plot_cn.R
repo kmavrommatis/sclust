@@ -185,7 +185,7 @@ plot.cn.profile=function(fname,purity,ploidy)
             }
         if(dim(s)[1] != 0)
             {
-                for(i in 1:dim(s)[1])
+                for(i in seq_len(dim(s)[1]))
                     {
                         start=chr.start[chrs==s$Chromosome[i]]
                         cn=s$Subclonal_CN[i]
