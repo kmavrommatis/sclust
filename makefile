@@ -116,10 +116,24 @@ OPENBLAS: ./openBLAS/lib/libopenblas.a
 
 cn.o: installdir.h
 
+# Allow INSTALLDIR to be overridden for container builds
+# Default to current directory for local builds, /usr/local/share/Sclust for installs
+INSTALL_PREFIX ?= `pwd`
+
 installdir.h:
 	@echo "Creating installdir.h..."
-	@echo "#define INSTALLDIR \""`pwd`"\"" > installdir.h
+	@echo "#define INSTALLDIR \"$(INSTALL_PREFIX)\"" > installdir.h
 	@echo "...done."
+
+install: Sclust
+	@echo "Installing Sclust..."
+	@mkdir -p $(DESTDIR)/usr/local/bin
+	@mkdir -p $(DESTDIR)$(INSTALL_PREFIX)/R
+	@cp ./bin/Sclust $(DESTDIR)/usr/local/bin/
+	@cp ./R/*.R $(DESTDIR)$(INSTALL_PREFIX)/R/
+	@echo "Installation complete. Binary: /usr/local/bin/Sclust"
+	@echo "R scripts: $(INSTALL_PREFIX)/R/"
+	@echo "Note: INSTALLDIR is set to $(INSTALL_PREFIX)"
 
 clean:
 	@rm -f *.o numerics/*.o installdir.h
