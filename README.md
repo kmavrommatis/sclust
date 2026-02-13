@@ -3,7 +3,9 @@ Code for SCLUST and modifications
 
 - user provides directory with partition data (--dir)
 - bamprocess is multithreading (--threads)
-
+- Added --max-qp-iter command-line option to both cn and cluster commands (default: 100)
+- Modified the QP solver to accept the iteration limit as a parameter
+- To enable better error handling in automated pipelines, the program now uses distinct exit codes:
 
 ### Protocol for use:
 
