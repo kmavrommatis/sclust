@@ -74,6 +74,7 @@ typedef struct{
   bool phylowgs;
   bool pyclone;
   bool as;
+  long max_qp_iter;
 } seqcn_par;
 
 typedef struct{

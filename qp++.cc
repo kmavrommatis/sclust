@@ -60,7 +60,7 @@ void vinit(prec_t *M,size_t n)
 }
 
 #ifdef LAPACK
-void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p, size_t n) {
+void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p, size_t n, long max_qp_iter) {
    long prec=6;
 
    prec_t *a= (double *)mkl_malloc( n*sizeof( double ), 64 );;
@@ -73,7 +73,7 @@ void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p,
       a[i]=(-1)*dvec_p[i];
 
 
-   solveqp_1D(n,Dmat_p,a,S_p);
+   solveqp_1D(n,Dmat_p,a,S_p,max_qp_iter);
 
    matmul('N','N',S_p,n,n,a,n,1,x_p,n,1);
 
@@ -81,7 +81,7 @@ void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p,
 }
 
 #else
-void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p, size_t n) {
+void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p, size_t n, long max_qp_iter) {
 
   long prec=6;
 
@@ -108,7 +108,7 @@ void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p,
   clear_dmatrix(S,n,n);
   
   //solves the problem min(a^T x+0.5 x^T G x) subject to x>=0
-  solveqp(n,G,a,S);
+  solveqp(n,G,a,S,max_qp_iter);
   
   clear_dvector(x,n);
   for(size_t i=1;i<=n;++i)
@@ -188,7 +188,7 @@ void matmul(char tA, char tB, prec_t *A, size_t A_rows, size_t A_cols, prec_t *B
   }
 }
 
-void spline_deconv(prec_t *x, size_t x_s, prec_t *y, size_t y_s, prec_t *w, prec_t *g,prec_t *GAM, prec_t alpha) {
+void spline_deconv(prec_t *x, size_t x_s, prec_t *y, size_t y_s, prec_t *w, prec_t *g,prec_t *GAM, prec_t alpha, long max_qp_iter) {
   size_t n=x_s;
   double gcv,trS;
   prec_t *Q,*R,*W,*TMP,*C,*A,*A_TMP,*Dmat,*Amat,*dvec,*RTST,*RBAK,*GAM_TMP,*GAM_SUB_TMP,*S_tmp;
@@ -319,7 +319,7 @@ void spline_deconv(prec_t *x, size_t x_s, prec_t *y, size_t y_s, prec_t *w, prec
   matmul('T','T',y,n,1,A,n,n,dvec,1,n);	
   
   //call quadratic solver; Solution into g vector and S_tmp Matrix
-  spline_deconv_qp(Dmat, dvec, S_tmp, g, n);
+  spline_deconv_qp(Dmat, dvec, S_tmp, g, n, max_qp_iter);
   
   // gam=c(0,solve(R)%*%t(Q)%*%g,0)	with R still beeing R^-1=solve(R)
   // first: GAM_SUB_TMP=solve(R)%*%t(Q)

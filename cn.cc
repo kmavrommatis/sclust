@@ -30,6 +30,7 @@
 #include <list>
 #include <map>
 #include <sstream>
+#include <sys/wait.h>
 
 #include "Sclust.h"
 #include "numerics/nr.h"
@@ -60,7 +61,8 @@ string cn_help = "      SYNOPSIS \n \t Sclust cn  <options>\n\n \
      \t -phylowgs \t if this flag is set, input for phylowgs is generated\n \
      \t -pyclone  \t if this flag is set, input for pyclone is generated\n \
      \t -as	  \t flag for allele-specific enriched muts_expAF output\n \
-     \t -min_seg  \t minimal number of partitions per segment [2]\n\n";
+     \t -min_seg  \t minimal number of partitions per segment [2]\n\
+     \t -max_qp_iter \t max iterations for QP solver [100]\n\n";
 
 
 bool cmp_profile(seqcn_profile a,seqcn_profile b) {return(a.scale < b.scale);}
@@ -130,6 +132,7 @@ void cn(int argc, char *argv[])
   seqcn.phylowgs=0;
   seqcn.pyclone=0;
   seqcn.as=0;
+  seqcn.max_qp_iter=100;
 
   int longindex,opt;
   // option definition
@@ -156,6 +159,7 @@ void cn(int argc, char *argv[])
     {"phylowgs" , 0, 0,   17},
     {"pyclone"  , 0, 0,   18},
     {"as"       , 0, 0,   19},
+    {"max_qp_iter" , 1, 0,   20},
     {0, 0, 0, 0}
   }; 
 
@@ -230,6 +234,9 @@ void cn(int argc, char *argv[])
 	  break;
         case 19:
           seqcn.as = 1;
+          break;
+        case 20:
+          seqcn.max_qp_iter = atol(optarg);
           break;
 	default:
           cerr << "Error: cannot parse arguments.\n";
@@ -820,7 +827,11 @@ void purity_est(vector<CN_data> &CN, vector<SNP_data> snp_list, vector<vcf_data>
 	       est_alleles_seqcn(obs_p,purity,scale,sig,seqcn,L_bi,L_cn);
 	       mut2cn(obs_p,vcf);
 	       vcf_expected_AF(seqcn.out_name,obs_p,purity,vcf,seqcn);
-	       system(((string)"Sclust cluster -i "+seqcn.out_name).c_str());
+	       int cluster_exit_code = system(((string)"Sclust cluster -i "+seqcn.out_name+" --max_qp_iter "+to_string(seqcn.max_qp_iter)).c_str());
+	       if(cluster_exit_code != 0) {
+	           // Propagate the exit code from cluster subprocess (e.g., exit code 2 for QP iteration limit)
+	           exit(WEXITSTATUS(cluster_exit_code));
+	       }
 	       in.open((seqcn.out_name+"_mclusters.txt").c_str());
 	       if(!in.is_open())
 		 {

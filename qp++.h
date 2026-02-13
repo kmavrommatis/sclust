@@ -44,8 +44,8 @@ void vinit(prec_t *M,size_t n);
 inline prec_t pnorm(prec_t q, prec_t mean, prec_t sd);
 inline prec_t calc_a (size_t i, size_t j, prec_t *x, prec_t sig);
 void diag(prec_t *MAT, prec_t val, size_t n);
-void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p, size_t n);
+void spline_deconv_qp (prec_t *Dmat_p, prec_t *dvec_p, prec_t *S_p, prec_t *x_p, size_t n, long max_qp_iter);
 void matmul(char tA, char tB, prec_t *A, size_t A_rows, size_t A_cols, prec_t *B, size_t B_rows, size_t B_cols, prec_t *C, size_t C_rows, size_t C_cols);
 void matmul(char tA, char tB, prec_t *A, size_t A_rows, size_t A_cols, prec_t *B, size_t B_rows, size_t B_cols, prec_t Sca_Mul, prec_t Sca_Add, prec_t *C, size_t C_rows, size_t C_cols);
-void spline_deconv(prec_t *x, size_t x_s, prec_t *y, size_t y_s, prec_t *w, prec_t *g, prec_t *gam_p, prec_t alpha);
+void spline_deconv(prec_t *x, size_t x_s, prec_t *y, size_t y_s, prec_t *w, prec_t *g, prec_t *gam_p, prec_t alpha, long max_qp_iter);
 #endif

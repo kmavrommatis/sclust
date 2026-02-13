@@ -388,7 +388,7 @@ void cpymat(double *SOURCE, double *TARGET, size_t row, size_t col) {
      cblas_dcopy(row*col,SOURCE,1,TARGET,1);
 }
 
-void solveqp(long n,double **G,double *a,double **S) {
+void solveqp(long n,double **G,double *a,double **S,long maxit) {
 //wrapper for 2d-Arrays
    prec_t *G_Mat, *a_vec, *S_Mat;
    G_Mat= (double *)mkl_malloc( n*n*sizeof( double ), 64 );
@@ -402,7 +402,7 @@ void solveqp(long n,double **G,double *a,double **S) {
    for (size_t i=0;i<n;++i)
       a_vec[i]=a[i+1];
 
-   solveqp_1D(n, G_Mat, a_vec, S_Mat);
+   solveqp_1D(n, G_Mat, a_vec, S_Mat, maxit);
 
    for (size_t i=0;i<n;++i)
       for (size_t j=0;j<n;++j)
@@ -413,11 +413,10 @@ void solveqp(long n,double **G,double *a,double **S) {
    mkl_free(S_Mat);
 }
 
-void solveqp_1D(long n,double *G,double *a,double *S)
+void solveqp_1D(long n,double *G,double *a,double *S,long maxit)
 {  
    //solves the problem min(a^T x+0.5 x^T G x) subject to x>=0
    long prec=6;
-   long maxit=100;
    long nx;
    vector<long> act;//active constraints
    
@@ -482,7 +481,7 @@ void solveqp_1D(long n,double *G,double *a,double *S)
       
       if(it==maxit) {
          cerr << "Error: QP has reached maximal number of iterations currently set to: " << maxit << ".\n";
-         exit(1);
+         exit(2);
       }
    }
 
@@ -492,14 +491,14 @@ void solveqp_1D(long n,double *G,double *a,double *S)
    mkl_free(x_pre);
 }
 #else
-void solveqp(long n,double **G,double *a,double **S)
+void solveqp(long n,double **G,double *a,double **S,long maxit)
 {
   //solves the problem min(a^T x+0.5 x^T G x) subject to x>=0
   double **Ginv;
   long prec=6;
   double *u; //Lagrange multipliers
   double *x,*x_pre; //solution
-  long maxit=100;
+
   long nx;
   vector<long> act; //active constraints
 
@@ -560,7 +559,7 @@ void solveqp(long n,double **G,double *a,double **S)
       if(it==maxit)
 	{
 	  cerr << "Error: QP has reached maximal number of iterations currently set to: " << maxit << ".\n";
-	  exit(1);
+	  exit(2);
 	}
     }
 

@@ -62,10 +62,10 @@ double rp(double val,long prec);
 void choldc_inv(long n,double **G,double **Ginv);
 double l1_norm(long n,double *x1,double *x2);
 void initmat(prec_t *MAT, size_t r, size_t c, prec_t val);
-void solveqp(long n,double **G,double *a,double **S);
+void solveqp(long n,double **G,double *a,double **S,long maxit);
 #ifdef LAPACK
 void cpymat(double *SOURCE, double *TARGET, size_t row, size_t col);
-void solveqp_1D(long n,double *G,double *a,double *S);
+void solveqp_1D(long n,double *G,double *a,double *S,long maxit);
 void solve_sub(long n, double *Ginv_M, double *a, vector<long> &act_v, size_t act_v_size, double *u_v, double *S_M);
 #else
 void solve_sub(long n,double **Ginv,double *a,vector<long> act,double *u,double **S);

@@ -46,7 +46,8 @@ string mcluster_help = "      SYNOPSIS \n \t Sclust cluster <options>\n\n \
      \t -o      \t output name (prefix) \n \
      \t -nbins  \t number of histogram bins [100]\n \
      \t -indel  \t include indels for clustering\n \
-     \t -lambda \t smoothing parameter [1e-7]\n\n";
+     \t -lambda \t smoothing parameter [1e-7]\n\
+     \t -max_qp_iter \t max iterations for QP solver [100]\n\n";
 
 
 typedef struct{
@@ -84,6 +85,7 @@ void cluster(int argc,char *argv[])
     {"nbins" , 1, 0,    3},
     {"lambda", 1, 0,    4},
     {"indel" , 0, 0,    5},
+    {"max_qp_iter", 1, 0,    6},
     {0, 0, 0, 0}
   }; 
 
@@ -93,6 +95,7 @@ void cluster(int argc,char *argv[])
   long nbins=100;
   double alpha=1e-7;
   double max_x=1.5;
+  long max_qp_iter=100;
   //parse command line arguments
   while((opt=getopt_long_only(argc,argv,"h?",longopts,&longindex)) != -1)
     {
@@ -123,6 +126,9 @@ void cluster(int argc,char *argv[])
 	  break;
 	case 5:
 	  use_indels=1;
+	  break;
+	case 6:
+	  max_qp_iter=atol(optarg);
 	  break;
 	default:
           cerr << "Error: cannot parse arguments.\n";
@@ -249,7 +255,7 @@ void cluster(int argc,char *argv[])
     }
   
   //solve deconvolution problem
-  spline_deconv(x, nbins, y, nbins, w, g, gam, alpha);
+  spline_deconv(x, nbins, y, nbins, w, g, gam, alpha, max_qp_iter);
 
   //peak finding
   vector<double> cluster_ccf;
